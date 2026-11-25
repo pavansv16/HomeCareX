@@ -1,0 +1,92 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: homecarex-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: homecarex-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: homecarex-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=5000
+      - API_PREFIX=/api/v1
+      # In Docker, Mongo/Redis are the service names above, not localhost.
+      - DATABASE_URL=${DATABASE_URL:-mongodb://mongo:27017/homecarex}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-${JWT_SECRET}}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      # Optional — only set the ones you actually use:
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:-}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-}
+      - CLOUDINARY_URL=${CLOUDINARY_URL:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - MAIL_FROM=${MAIL_FROM:-}
+      - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY:-}
+      - BOOKING_REQUIRE_PAYMENT=${BOOKING_REQUIRE_PAYMENT:-true}
+      - PAYOUTS_DEMO_MODE=${PAYOUTS_DEMO_MODE:-true}
+    volumes:
+      - backend_storage:/app/storage
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked in at build time; /api is proxied by nginx to backend.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-}
+    container_name: homecarex-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
+  redis_data:
+  backend_storage:
