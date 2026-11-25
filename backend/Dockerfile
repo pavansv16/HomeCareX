@@ -7,8 +7,7 @@ WORKDIR /app
 COPY package.json ./
 
 # Install dependencies
-RUN npm install
-
+RUN npm install --legacy-peer-deps
 # Copy TypeScript configuration
 COPY tsconfig.json ./
 
@@ -30,8 +29,7 @@ ENV NODE_ENV=production
 COPY package.json ./
 
 # Install only production dependencies
-RUN npm install --omit=dev && npm cache clean --force
-
+RUN npm install --omit=dev --legacy-peer-deps && npm cache clean --force
 # Copy compiled application
 COPY --from=build /app/dist ./dist
 
